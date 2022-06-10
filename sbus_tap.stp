@@ -1,0 +1,140 @@
+global underline = "\033[0;4m"
+global normal = "\033[0m"
+
+global is_in = 0
+global indent = ""
+
+global curr_req_name = ""
+global curr_req_id = -1
+global curr_req_type = ""
+global curr_target = ""
+
+global send_time = 0
+global done_time = 0
+
+global can_stop = 0
+global is_id = 0
+
+global tmp_array
+
+probe nss_getby_id_send {
+    if (nss_getby_id != 0) {
+        id = pid()
+
+        printf("---------------------------\n")
+
+        curr_req_id = nss_getby_id
+        is_id = 1
+        printf("NSS_SEND [%d]: %d\n", id, nss_getby_id);
+    }
+}
+
+probe nss_getby_name_send {
+    if (nss_getby_rawname != "root") {
+        id = pid()
+
+        printf("---------------------------\n")
+
+        curr_req_name = nss_getby_rawname
+        printf("NSS_SEND [%d]: %s\n", id, nss_getby_rawname);
+    }
+}
+
+function convert_id_to_string:string (id:long) %{
+    char str[80];
+    sprintf(str, "%lld", STAP_ARG_id);
+    STAP_RETURN(str);
+%}
+
+probe nss_getby_name_done {
+    if (nss_getby_rawname != "root") {
+        id = pid()
+        printf("NSS_DONE [%d]: %s\n", id, nss_getby_rawname);
+
+        if (done_time != 0) {
+            printf("The request took: %d\n", done_time)
+            if (is_id) {
+                is_id = 0
+                nss_getby_rawname = convert_id_to_string(curr_req_id)
+            }
+            tmp_array[nss_getby_rawname, nss_getby_req_type, id] <<< done_time
+            done_time = 0
+        }
+    }
+}
+
+probe sss_dp_send {
+    id = pid()
+    is_in += 1
+
+    indentation()
+
+    if (curr_req_name == opt_name || curr_req_id == opt_id) {
+        send_time = gettimeofday_us()
+        curr_target = conn_name
+    }
+
+    printf("%sSSS_SEND [%d]: %s, %d, %s, %s\n", indent, id, opt_name, opt_id, filter, conn_name)
+}
+
+probe sss_dp_done {
+    id = pid()
+
+    if (can_stop) {
+        can_stop = 0
+        done_time = gettimeofday_us() - send_time
+    }
+
+    indentation()
+    printf("%sSSS_DONE [%d]: %d, %d, %s\n", indent, id, dp_error, error, error_message)
+
+    is_in -= 1
+}
+
+probe sbus_req_call_send {
+    if (sbus_wellknown_name != "sssd.monitor") {
+        id = pid()
+        is_in += 1
+
+        indentation()
+        printf("%sBUS_SEND [%d]: %s, (%s, %s)\n", indent, id, sbus_bus,
+                                                  sbus_iface, sbus_method)
+    }
+}
+
+probe sbus_req_call_done {
+    if (sbus_dest != "sssd.monitor") {
+        id = pid()
+
+        if (curr_target == sbus_send) {
+            can_stop = 1
+        }
+
+        indentation()
+        printf("%sBUS_DONE [%d]: %s\n", indent, id, sbus_send)
+        is_in -= 1
+    }
+}
+
+probe begin {
+    printf("%sStarting%s...\n", underline, normal)
+}
+
+probe end {
+    printf("\n--------------------------\nThe End...\n")
+    foreach ([i, j, k] in tmp_array) {
+        printf("Requests for %s:\n    Cnt: %d\n    Min: %d\n    Max: %d\n    Avg: %d\n",
+               i, @count(tmp_array[i, j, k]), @min(tmp_array[i, j, k]),
+               @max(tmp_array[i, j, k]), @avg(tmp_array[i, j, k]))
+    }
+}
+
+function indentation() {
+    if (is_in != 0) {
+        tmp = ""
+        for (i = 0; i < is_in; i++) {
+            tmp = tmp."  "
+        }
+        indent = tmp
+    }
+}
