@@ -15,7 +15,9 @@ global done_time = 0
 global can_stop = 0
 global is_id = 0
 
-global tmp_array
+global results
+
+global method_counter
 
 probe nss_getby_id_send {
     if (nss_getby_id != 0) {
@@ -30,7 +32,9 @@ probe nss_getby_id_send {
 }
 
 probe nss_getby_name_send {
-    if (nss_getby_rawname != "root") {
+    if (nss_getby_rawname == "admin@ipa.test"           ||
+        nss_getby_rawname == "administrator@samba.test" ||
+        nss_getby_rawname == "adminldap@ldap.test") {
         id = pid()
 
         printf("---------------------------\n")
@@ -47,27 +51,28 @@ function convert_id_to_string:string (id:long) %{
 %}
 
 probe nss_getby_name_done {
-    if (nss_getby_rawname != "root") {
-        id = pid()
-        printf("NSS_DONE [%d]: %s\n", id, nss_getby_rawname);
+    id = pid()
+    printf("NSS_DONE [%d]: %s\n", id, nss_getby_rawname);
 
-        if (done_time != 0) {
-            printf("The request took: %d\n", done_time)
-            if (is_id) {
-                is_id = 0
-                nss_getby_rawname = convert_id_to_string(curr_req_id)
-            }
-            tmp_array[nss_getby_rawname, nss_getby_req_type, id] <<< done_time
-            done_time = 0
+    if (done_time != 0) {
+        printf("The request took: %d\n", done_time)
+        if (is_id) {
+            is_id = 0
+            nss_getby_rawname = convert_id_to_string(curr_req_id)
         }
+        results[nss_getby_rawname, nss_getby_req_type, id] <<< done_time
+        done_time = 0
+        indent = ""
+        is_in = 0
     }
 }
 
 probe sss_dp_send {
     id = pid()
-    is_in += 1
+    modify_indent(1)
 
     indentation()
+#     printf("Increasing indent in dp_send to '%s' with %d\n", indent, is_in)
 
     if (curr_req_name == opt_name || curr_req_id == opt_id) {
         send_time = gettimeofday_us()
@@ -88,22 +93,28 @@ probe sss_dp_done {
     indentation()
     printf("%sSSS_DONE [%d]: %d, %d, %s\n", indent, id, dp_error, error, error_message)
 
-    is_in -= 1
+    modify_indent(-1)
+#     printf("Reducing indent in dp_done from '%s' with %d\n", indent, is_in)
 }
 
 probe sbus_req_call_send {
-    if (sbus_wellknown_name != "sssd.monitor") {
+    if (sbus_method == "getAccountInfo") {
         id = pid()
-        is_in += 1
+        modify_indent(1)
 
         indentation()
+#         printf("Increasing indent in call_send to '%s' with %d\n", indent, is_in)
         printf("%sBUS_SEND [%d]: %s, (%s, %s)\n", indent, id, sbus_bus,
                                                   sbus_iface, sbus_method)
+    } else {
+        method_counter += 1
+#         printf("Counting: %d\n", method_counter)
+#         printf("Not intrested in method: %s\n", sbus_method)
     }
 }
 
 probe sbus_req_call_done {
-    if (sbus_dest != "sssd.monitor") {
+    if (method_counter <= 0) {
         id = pid()
 
         if (curr_target == sbus_send) {
@@ -112,7 +123,13 @@ probe sbus_req_call_done {
 
         indentation()
         printf("%sBUS_DONE [%d]: %s\n", indent, id, sbus_send)
-        is_in -= 1
+        modify_indent(-1)
+#         printf("Counter is at: %d\n", method_counter)
+#         printf("Reducing indent in call_done from '%s' with %d\n", indent, is_in)
+    } else {
+        method_counter -= 1
+#         printf("Skipping...\n")
+#         printf("Counting: %d\n", method_counter)
     }
 }
 
@@ -122,11 +139,18 @@ probe begin {
 
 probe end {
     printf("\n--------------------------\nThe End...\n")
-    foreach ([i, j, k] in tmp_array) {
-        printf("Requests for %s:\n    Cnt: %d\n    Min: %d\n    Max: %d\n    Avg: %d\n",
-               i, @count(tmp_array[i, j, k]), @min(tmp_array[i, j, k]),
-               @max(tmp_array[i, j, k]), @avg(tmp_array[i, j, k]))
+    foreach ([i, j, k] in results) {
+        printf("Requests for %s, %s, %d:\n    Cnt: %d\n    Min: %d\n    Max: %d\n    Avg: %d\n",
+               i, j, k, @count(results[i, j, k]), @min(results[i, j, k]),
+               @max(results[i, j, k]), @avg(results[i, j, k]))
     }
+}
+
+function modify_indent(val) {
+    if (is_in <= 0 && val == -1)
+        is_in = 0
+    else
+        is_in += val
 }
 
 function indentation() {
