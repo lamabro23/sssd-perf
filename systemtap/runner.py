@@ -1,5 +1,5 @@
 import argparse
-import os
+from pathlib import Path
 import pwd
 import re
 import shutil
@@ -122,16 +122,16 @@ def resume_providers() -> None:
         run(['/bin/systemctl', 'restart', 'sssd.service'], stdout=DEVNULL)
 
 
-def start_sytemtap() -> Popen:
-    print(f'Starting the systemtap script: {args.systemtap_script}')
-    stap_cmd = ['stap', '-w', '-g', f'{args.systemtap_script}', '-o', f'{args.stap_output}']
+def start_sytemtap(script: str, out: str) -> Popen:
+    print(f'Starting the systemtap script: {script}')
+    stap_cmd = ['stap', '-w', '-g', f'{script}', '-o', f'{out}']
     print(' '.join(stap_cmd))
     stap_process = Popen(stap_cmd, stdout=DEVNULL, stderr=STDOUT)
     sleep(5)
     return stap_process
 
 
-if not os.path.isfile(sss_cache) or not os.path.isfile(sssctl):
+if not Path(sss_cache).exists() or not Path(sssctl).exists():
     print('Please install the sssd_tools package')
     exit(1)
 
@@ -139,17 +139,25 @@ if not os.path.isfile(sss_cache) or not os.path.isfile(sssctl):
 # TODO change the return value to a list if the content
 # won't be needed in other ways
 def check_ldap_config(parser: argparse.ArgumentParser, arg: str):
-    if not os.path.isfile(arg):
+    if not Path(arg).exists():
         parser.error(f'The file {arg} does not exist!')
     else:
         return open(arg, 'r')
+
+
+def check_parent_dir(arg: str):
+    p = Path(arg).parent
+    if not p.exists():
+        p.mkdir()
+    return arg
 
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-p', '--providers', nargs='+', default=providers)
 parser.add_argument('-r', '--requests-count', type=int, default=1)
 parser.add_argument('-s', '--systemtap-script', type=str, default='sbus_tap.stp')
-parser.add_argument('-o', '--stap-output', type=str, default='csv/stap.csv')
+parser.add_argument('-o', '--stap-output', default='csv/stap.csv',
+                    type=lambda x: check_parent_dir(x))
 parser.add_argument('-l', '--ldap-config', default='conf/sssd-ldap.conf',
                     type=lambda x: check_ldap_config(parser, x))
 
@@ -158,7 +166,7 @@ args = parser.parse_args()
 
 prepare_providers(args.providers)
 
-stap = start_sytemtap()
+stap = start_sytemtap(args.systemtap_script, args.stap_output)
 
 for provider, usernames in users.items():
     if provider in args.providers:
