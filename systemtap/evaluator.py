@@ -1,6 +1,7 @@
 import argparse
 import csv
 
+from pathlib import Path
 from matplotlib.lines import Line2D
 import matplotlib.pyplot as plt
 import numpy as np
@@ -12,21 +13,31 @@ import seaborn as sns
 providers = ['ipa.test', 'samba.test', 'ldap.test']
 
 
-def transpose_csv(file: str, new_file: str) -> None:
+def transpose_csv(file: str, new_file: Path) -> None:
     og = zip(*csv.reader(open(file, 'r')))
     csv.writer(open(new_file, 'w')).writerows(og)
 
 
+def check_parent_dir(arg: str):
+    p = Path(arg).parent
+    if not p.exists():
+        p.mkdir()
+    return arg
+
+
 parser = argparse.ArgumentParser()
 parser.add_argument('-p', '--providers', nargs='+', default=providers)
-parser.add_argument('-f', '--files', type=list, default=['stap.csv', 'old_stap.csv'])
+parser.add_argument('-f', '--files', type=list, default=['csv/stap.csv', 'csv/old_stap.csv'])
+parser.add_argument('-o', '--output', type=lambda x: check_parent_dir(x), default='figures/figure.png')
 args = parser.parse_args()
 
 
 df = []
 for x in args.files:
-    transpose_csv(x, 'fixed_' + x)
-    df.append(pd.read_csv('fixed_' + x))
+    p = Path(x)
+    new_name = p.with_name('fixed_' + p.name)
+    transpose_csv(x, new_name)
+    df.append(pd.read_csv(new_name))
 
 # Remove outliers from the dataframes
 df[0] = df[0][(np.abs(stats.zscore(df[0])) < 3).all(axis=1)]
@@ -42,12 +53,14 @@ data = pd.melt(data.reset_index(), id_vars=['req_num', 'version'], value_vars=da
 plt.rc('legend', loc="upper right")
 
 my_palette = ['#fb4d3d', '#345995']
+another_palette = ['#000000', '#fcba03']
 sns.set_palette(palette=my_palette)
 fig, axes = plt.subplots(len(col_names), 1, figsize=(18/2.54, 3*(28/2.54)))
-# fig.suptitle('Performance results')
 
 custom_legend = [Line2D([0], [0], color='black', label='Mean'),
-                 Line2D([0], [0], color='black', label='Median', linestyle='--')]
+                 Line2D([0], [0], color='black', label='Median', linestyle='--'),
+                 Line2D([0], [0], color='black', label='Q1', linestyle=':'),
+                 Line2D([0], [0], color='black', label='Q3', linestyle='-.')]
 
 for ax, name in zip(axes, col_names):
     ax.set_xlabel('Num. of request')
@@ -59,21 +72,19 @@ for ax, name in zip(axes, col_names):
     curr = data.loc[data.provider == name].reset_index()
     sns.scatterplot(ax=ax, data=curr, x=curr.req_num, y=curr.time, hue=curr.version, s=8)
     handles, labels = ax.get_legend_handles_labels()
-    for vrsn in curr.version.unique():
+    for i, vrsn in enumerate(curr.version.unique()):
         sep_vrsn = curr.loc[curr.version == vrsn]
-        sns.lineplot(ax=ax, data=sep_vrsn, x=sep_vrsn.req_num, y=sep_vrsn.time.mean(), hue=curr.version, linewidth=2)
-        sns.lineplot(ax=ax, data=sep_vrsn, x=sep_vrsn.req_num, y=sep_vrsn.time.median(), hue=curr.version, linewidth=2, ls='--')
+        ax.axhline(sep_vrsn.time.mean(), color=my_palette[i])
+        ax.axhline(sep_vrsn.time.median(), color=my_palette[i], linestyle='--')
+        ax.axhline(sep_vrsn.time.quantile(0.25, interpolation='midpoint'),
+                   color=my_palette[i], linestyle=':')
+        ax.axhline(sep_vrsn.time.quantile(0.75, interpolation='midpoint'),
+                   color=my_palette[i], linestyle='-.')
 
-    ax.get_legend().remove()
+    ax.add_artist(ax.legend(handles, labels, loc='upper right'))
+    ax.legend(handles=custom_legend, loc='upper left')
 
-fig.add_artist(fig.legend(handles, labels, loc='lower right'))
-fig.legend(handles=custom_legend, loc='lower left')
 plt.tight_layout()
 
-plt.savefig('/home/duradnik/Tmp/figure.png')
+plt.savefig(args.output)
 plt.show()
-
-# graph.axhline(df['ipa.test'].min())
-# graph.axhline(df['ipa.test'].max())
-# graph.axhline(df['ipa.test'].quantile(0.25, interpolation='midpoint'))
-# graph.axhline(df['ipa.test'].quantile(0.75, interpolation='midpoint'))
