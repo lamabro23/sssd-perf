@@ -6,6 +6,9 @@ import shutil
 from subprocess import DEVNULL, PIPE, Popen, STDOUT, run
 from time import sleep
 
+# TODO add check for currently used domains (sssctl domain-list)
+# TODO OR create containers within the script
+
 closed_providers = []
 sssctl = '/usr/sbin/sssctl'
 sss_cache = '/usr/sbin/sss_cache'
@@ -146,19 +149,15 @@ parser = argparse.ArgumentParser()
 parser.add_argument('-p', '--providers', nargs='+', default=providers)
 parser.add_argument('-r', '--requests-count', type=int, default=1)
 parser.add_argument('-s', '--systemtap-script', type=str, default='sbus_tap.stp')
-parser.add_argument('-o', '--stap-output', type=str, default='stap.txt')
-parser.add_argument('-l', '--ldap-config', default='sssd-ldap.conf',
+parser.add_argument('-o', '--stap-output', type=str, default='csv/stap.csv')
+parser.add_argument('-l', '--ldap-config', default='conf/sssd-ldap.conf',
                     type=lambda x: check_ldap_config(parser, x))
 
 args = parser.parse_args()
 
 
-with open('/home/duradnik/School/Bachelors/systemtap/stap.txt', 'a') as out:
-    out.write(f'SCRIPT: Preparing providers...\n')
 prepare_providers(args.providers)
 
-with open('/home/duradnik/School/Bachelors/systemtap/stap.txt', 'a') as out:
-    out.write(f'SCRIPT: Starting stap...\n')
 stap = start_sytemtap()
 
 for provider, usernames in users.items():
@@ -169,10 +168,7 @@ for provider, usernames in users.items():
             for i in range(args.requests_count):
                 run([sss_cache, '-E'])
                 try:
-                    with open('/home/duradnik/School/Bachelors/systemtap/stap.txt', 'a') as out:
-                        out.write(f'SCRIPT: Fetching for {user} now...\n')
-                        pwd.getpwnam(user)
-                        out.write(f'SCRIPT: Fetched {user}...\n')
+                    pwd.getpwnam(user)
                 except KeyError as e:
                     print('Error:', e)
 

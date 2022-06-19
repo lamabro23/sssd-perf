@@ -1,0 +1,306 @@
+global underline = "\033[0;4m"
+global normal = "\033[0m"
+
+# global is_in = 0
+# global indent = ""
+
+global curr_req_name = ""
+global curr_req_type = ""
+global curr_target = ""
+
+global send_time = 0
+global done_time = 0
+
+global can_stop = 0
+
+global results
+
+global method_counter
+
+%{
+    long int ipa_results[1000];
+    long int ipa_counter = 0;
+
+    long int samba_results[1000];
+    long int samba_counter = 0;
+
+    long int ldap_results[1000];
+    long int ldap_counter = 0;
+%}
+
+/*
+ *  Catch an NSS request with a user name as an argument.
+ */
+probe nss_getby_name_send {
+    if (nss_getby_rawname == "admin@ipa.test"           ||
+        nss_getby_rawname == "administrator@samba.test" ||
+        nss_getby_rawname == "adminldap@ldap.test") {
+        id = pid()
+
+#         printf("---------------------------\n")
+
+        curr_req_name = nss_getby_rawname
+#         printf("NSS_SEND [%d]: %s\n", id, nss_getby_rawname);
+    }
+}
+
+/*
+ *  Catch an ending NSS request.
+ */
+probe nss_getby_done {
+    # stops any other process which goes through nss_getby_done()
+    # method from triggering the time
+    if (done_time != 0) {
+        id = pid()
+#         printf("NSS_DONE [%d]: %s\n", id, nss_getby_rawname);
+
+#         printf("The request took: %d\n", done_time)
+        results[nss_getby_rawname] <<< done_time
+        add_result_value(nss_getby_rawname, done_time)
+        done_time = 0
+#         indent = ""
+#         is_in = 0
+    }
+}
+
+/*
+ *  Catch the next step in NSS request's lifetime.
+ *  Start the timer for the request time.
+ */
+probe sss_dp_send {
+    id = pid()
+#     modify_indent(1)
+#     indentation()
+
+    if (curr_req_name == opt_name) {
+        send_time = gettimeofday_us()
+        curr_target = conn_name # this is used later to match the request in sbus_req_call_send
+    }
+
+#     printf("SSS_SEND [%d]: %s, %s\n", id, opt_name, conn_name)
+}
+
+/*
+ *  Catch the request returning from the data provider.
+ *  Stop the timer if sbus_req_call_done matches this request.
+ */
+probe sss_dp_done {
+    id = pid()
+
+    # the requst matches the one from sss_dp_send, timer can be stopped
+    if (can_stop) {
+        can_stop = 0
+        done_time = gettimeofday_us() - send_time
+    }
+
+#     indentation()
+#     printf("SSS_DONE [%d]: %s\n", id, error_message)
+
+#     modify_indent(-1)
+}
+
+/*
+ *  Catch the fully built request.
+ */
+probe sbus_req_call_send {
+    # ignore other methods triggered by sss_cache,...
+    if (sbus_method == "getAccountInfo") {
+        id = pid()
+#         modify_indent(1)
+
+#         indentation()
+#         printf("BUS_SEND [%d]: %s\n", id, sbus_method)
+    } else {
+        # some methods are nested, this counter deals with those
+        method_counter += 1
+    }
+}
+
+/*
+ *  Catch the request returning from data provider.
+ *  Check if the caught request matches the one from sss_dp_send and mark it.
+ */
+probe sbus_req_call_done {
+    if (method_counter <= 0) {
+        id = pid()
+
+        if (curr_target == sbus_send) {
+            can_stop = 1
+        }
+
+#         indentation()
+#         printf("BUS_DONE [%d]: %s - %s\n", id, curr_target, sbus_send)
+#         modify_indent(-1)
+    } else {
+        # some methods are nested, this counter deals with those
+        method_counter -= 1
+    }
+}
+
+probe begin {
+#     printf("%sStarting%s...\n", underline, normal)
+}
+
+probe end {
+#     printf("\n--------------------------\nThe End...\n")
+    foreach (i in results) {
+#         printf("Requests for %s, %s:\n    Cnt: %d\n    Min: %d\n    Max: %d\n    Avg: %d\n",
+#                i, j, @count(results[i, j]), @min(results[i, j]),
+#                @max(results[i, j]), @avg(results[i, j]))
+        tmp_name(i)
+    }
+}
+
+function tmp_name(name:string) %{
+    int i = 0;
+    long int counter = 0;
+    long int results[1000];
+
+    if (strstr(STAP_ARG_name, "ipa.test")) {
+        STAP_PRINTF("ipa.test,");
+        for (i; i < ipa_counter; i++) {
+            STAP_PRINTF("%ld", ipa_results[i]);
+            if (i != ipa_counter -1)
+                STAP_PRINTF(",");
+            else
+                STAP_PRINTF("\n");
+        }
+
+    } else if (strstr(STAP_ARG_name, "samba.test")) {
+        STAP_PRINTF("samba.test,");
+        for (i; i < samba_counter; i++) {
+            STAP_PRINTF("%ld", samba_results[i]);
+            if (i != samba_counter -1)
+                STAP_PRINTF(",");
+            else
+                STAP_PRINTF("\n");
+        }
+
+    } else if (strstr(STAP_ARG_name, "ldap.test")) {
+        STAP_PRINTF("ldap.test,");
+        for (i; i < ldap_counter; i++) {
+            STAP_PRINTF("%ld", ldap_results[i]);
+            if (i != ldap_counter -1)
+                STAP_PRINTF(",");
+            else
+                STAP_PRINTF("\n");
+        }
+
+    } else {
+        STAP_PRINTF("UNKNOWN SHIT");
+    }
+%}
+
+# function modify_indent(val) {
+#     if (is_in <= 0 && val == -1)
+#         is_in = 0
+#     else
+#         is_in += val
+# }
+
+# function indentation() {
+#     if (is_in != 0) {
+#         tmp = ""
+#         for (i = 0; i < is_in; i++) {
+#             tmp = tmp."  "
+#         }
+#         indent = tmp
+#     }
+# }
+
+/*
+ *  C code for converting numeric values their to string representation.
+ */
+function convert_id_to_string:string (id:long) %{
+    char str[80];
+    sprintf(str, "%lld", STAP_ARG_id);
+    STAP_RETURN(str);
+%}
+
+function add_result_value (name:string, time:long) %{
+    if (strstr(STAP_ARG_name, "ipa.test")) {
+        ipa_results[ipa_counter++] = STAP_ARG_time;
+    } else if (strstr(STAP_ARG_name, "samba.test")) {
+        samba_results[samba_counter++] = STAP_ARG_time;
+    } else if (strstr(STAP_ARG_name, "ldap.test")) {
+        ldap_results[ldap_counter++] = STAP_ARG_time;
+    } else {
+        STAP_PRINTF("UNKNOWN SHIT\n");
+    }
+    STAP_RETURN();
+%}
+
+function print_results(name:string) %{
+    int i, j = 0;
+    long int counter, median = 0;
+    long int results[100];
+    long int q1, q3 = 0;
+
+    /*
+     *  Move the values from the wanted array into a general
+     *  array for sorting later.
+     */
+    if (strstr(STAP_ARG_name, "ipa.test")) {
+        counter = ipa_counter;
+        for (i; i < ipa_counter; i++) {
+            results[i] = ipa_results[i];
+        }
+    } else if (strstr(STAP_ARG_name, "samba.test")) {
+        counter = samba_counter;
+        for (i; i < samba_counter; i++) {
+            results[i] = samba_results[i];
+        }
+    } else if (strstr(STAP_ARG_name, "ldap.test")) {
+        counter = ldap_counter;
+        for (i; i < ldap_counter; i++) {
+            results[i] = ldap_results[i];
+        }
+    } else {
+        STAP_PRINTF("UNKNOWN SHIT");
+    }
+
+    /*
+     *  Sort values in ascending order
+     */
+    i = 0;
+    for (i; i < counter; i++) {
+        j = i+1;
+        for (j; j < counter; j++) {
+            if (results[i] > results[j]) {
+                results[i] = results[i] + results[j];
+                results[j] = results[i] - results[j];
+                results[i] = results[i] - results[j];
+            }
+        }
+    }
+
+    /*
+     *  Calculate median and quartiles
+     */
+    if (counter % 2 == 0) {
+        median = (results[counter / 2] + results[counter / 2 - 1]) / 2;
+    } else {
+        median = results[counter / 2];
+    }
+
+    if ((counter / 2) % 2 == 0) {
+        q1 = (results[counter * 1/4] + results[counter * 1/4]) / 2;
+        q3 = (results[counter * 3/4] + results[counter * 3/4]) / 2;
+    } else {
+        q1 = results[counter * 1/4];
+        q3 = results[counter * 3/4];
+    }
+
+    STAP_PRINTF("     Q1: %ld\n", q1);
+    STAP_PRINTF("    Med: %ld\n", median);
+    STAP_PRINTF("     Q3: %ld\n", q3);
+
+    i = 0;
+    for (i; i < counter; i++) {
+        STAP_PRINTF("%d, ", results[i]);
+    }
+
+    STAP_PRINTF("\n");
+
+    STAP_RETURN();
+%}
