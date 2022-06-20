@@ -1,3 +1,4 @@
 .*
 systemtap/csv/*
 systemtap/figures/*
+hyperfine/json/*
