@@ -27,8 +27,10 @@ def check_parent_dir(arg: str):
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-p', '--providers', nargs='+', default=providers)
-parser.add_argument('-f', '--files', type=list, default=['csv/stap.csv', 'csv/old_stap.csv'])
-parser.add_argument('-o', '--output', type=lambda x: check_parent_dir(x), default='figures/figure.png')
+parser.add_argument('-f', '--files', type=list,
+                    default=['csv/stap.csv', 'csv/old_stap.csv'])
+parser.add_argument('-o', '--output', type=lambda x: check_parent_dir(x),
+                    default='figures/figure.png')
 args = parser.parse_args()
 
 
@@ -40,15 +42,20 @@ for x in args.files:
     df.append(pd.read_csv(new_name))
 
 # Remove outliers from the dataframes
-df[0] = df[0][(np.abs(stats.zscore(df[0])) < 3).all(axis=1)]
-df[1] = df[1][(np.abs(stats.zscore(df[1])) < 3).all(axis=1)]
+# df[0] = df[0][(np.abs(stats.zscore(df[0])) < 3).all(axis=1)]
+# df[1] = df[1][(np.abs(stats.zscore(df[1])) < 3).all(axis=1)]
+new_df = []
+for f in df:
+    new_df.append(f[(np.abs(stats.zscore(f)) < 3).all(axis=1)])
 
 assert len(df[0].columns.values) == len(df[1].columns.values)
 
 col_names = df[0].columns.values
 
-data = pd.concat(df, keys=['new', 'old'], names=['version', 'req_num'])
-data = pd.melt(data.reset_index(), id_vars=['req_num', 'version'], value_vars=data.columns.tolist(), var_name='provider', value_name='time', ignore_index=False)
+data = pd.concat(new_df, keys=['new', 'old'], names=['version', 'req_num'])
+data = pd.melt(data.reset_index(), id_vars=['req_num', 'version'],
+               value_vars=data.columns.tolist(), var_name='provider',
+               value_name='time', ignore_index=False)
 
 plt.rc('legend', loc="upper right")
 

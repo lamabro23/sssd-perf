@@ -15,7 +15,10 @@ sss_cache = '/usr/sbin/sss_cache'
 sssd_conf = '/etc/sssd/sssd.conf'
 providers = ['ipa', 'samba', 'ldap']
 
-users = {'ipa': ['admin@ipa.test'],
+# TODO add non-existent user requests to other providers
+# Note: either find a way to seperate the different 'unknown users'
+# or change the way evaluator plots the csvs
+users = {'ipa': ['admin@ipa.test', 'wrong@ipa.test'],
          'samba': ['administrator@samba.test'],
          'ldap': ['adminldap@ldap.test']}
 
@@ -122,9 +125,9 @@ def resume_providers() -> None:
         run(['/bin/systemctl', 'restart', 'sssd.service'], stdout=DEVNULL)
 
 
-def start_sytemtap(script: str, out: str) -> Popen:
+def start_sytemtap(script: str, out: str, verbose: int) -> Popen:
     print(f'Starting the systemtap script: {script}')
-    stap_cmd = ['stap', '-w', '-g', f'{script}', '-o', f'{out}']
+    stap_cmd = ['stap', '-w', '-g', f'{script}', '-o', f'{out}', f'{verbose}']
     print(' '.join(stap_cmd))
     stap_process = Popen(stap_cmd, stdout=DEVNULL, stderr=STDOUT)
     sleep(5)
@@ -156,6 +159,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('-p', '--providers', nargs='+', default=providers)
 parser.add_argument('-r', '--requests-count', type=int, default=1)
 parser.add_argument('-s', '--systemtap-script', type=str, default='sbus_tap.stp')
+parser.add_argument('-v', '--verbose-stap', type=int, default=0)
 parser.add_argument('-o', '--stap-output', default='csv/stap.csv',
                     type=lambda x: check_parent_dir(x))
 parser.add_argument('-l', '--ldap-config', default='conf/sssd-ldap.conf',
@@ -166,19 +170,22 @@ args = parser.parse_args()
 
 prepare_providers(args.providers)
 
-stap = start_sytemtap(args.systemtap_script, args.stap_output)
+stap = start_sytemtap(args.systemtap_script, args.stap_output, args.verbose_stap)
 
 for provider, usernames in users.items():
     if provider in args.providers:
         print(f'Run for {provider} has started')
         for user in usernames:
-            print(f'Fetching {user}')
+            print(f'  Fetching {user}')
             for i in range(args.requests_count):
                 run([sss_cache, '-E'])
                 try:
                     pwd.getpwnam(user)
                 except KeyError as e:
-                    print('Error:', e)
+                    if re.search('wrong@.*\\.test', str(e)) is not None:
+                        pass
+                    else:
+                        print('Error:', e)
 
 
 print('Test finished successfully!')
