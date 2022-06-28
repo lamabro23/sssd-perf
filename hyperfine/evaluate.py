@@ -27,7 +27,8 @@ dfs = []
 for result in results:
     tmp_df = pd.DataFrame(dict(zip([res.get('command') for res in result],
                                    [res.get('times') for res in result])))
-    tmp_df = tmp_df[(np.abs(stats.zscore(tmp_df)) < 4).all(axis=1)]
+    for _ in range(2):
+        tmp_df = tmp_df[(np.abs(stats.zscore(tmp_df)) < 3).all(axis=1)]
 
     if not args.one_graph:
         tmp_df = tmp_df.melt(var_name='command', value_name='time')
@@ -53,7 +54,7 @@ if args.one_graph:
                               hue='command', flierprops=props, dodge=False)
         boxplot.set_xticklabels([i + 1 for i in range(df['command'].nunique())])
 
-    boxplot.set_ylabel('Time [s]')
+    boxplot.set_ylabel('Time of request [s]')
     boxplot.set_xlabel('Commands')
     boxplot.legend()
 
@@ -75,7 +76,7 @@ else:
                               y='time', hue='command', dodge=False)
         boxplot.set_xticklabels(
                 [i + 1 for i in range(dfs[0]['command'].nunique())])
-        boxplot.set_ylabel('Time [s]')
+        boxplot.set_ylabel('Time [ms]')
         boxplot.set_xlabel('Commands')
         boxplot.legend()
 
