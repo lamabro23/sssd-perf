@@ -1,17 +1,23 @@
 #!/bin/bash
 
+print_on_error() {
+    echo "Invalid argument '$1', for option '-$2'!" >&2
+    echo "$3"
+    exit 1
+}
+
 check_opt() {
     if ! [[ $1 =~ $2 ]]; then
-        echo "Invalid argument '$1', for option '-$3'!" >&2
-        echo "$4"
-        exit 1
+        print_on_error $1 $3 $4
     fi
 }
 
 while getopts "r:p:o:s:" opt; do
     case "${opt}" in
         r)
-            check_opt $OPTARG "^[2-9][0-9]*$" "$opt" "The number of runs has to be at least 2"
+            if [ $OPTARG -lt 2 ]; then
+                print_on_error $OPTARG "$opt" "The number of runs has to be at least 2"
+            fi
             runs="$OPTARG";;
         p)
             check_opt $OPTARG "^.*@.*\..*" "$opt" "The correct format of parameter is '^.*@.*\..*'"
