@@ -83,7 +83,7 @@ else:
                               y='time', hue='command', dodge=False)
         boxplot.set_xticklabels(
                 [i + 1 for i in range(dfs[0]['command'].nunique())])
-        boxplot.set_ylabel('Time [ms]')
+        boxplot.set_ylabel('Time of request [s]')
         boxplot.set_xlabel('Commands')
         boxplot.legend(title='version')
 
