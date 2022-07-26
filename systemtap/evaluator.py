@@ -11,6 +11,8 @@ import seaborn as sns
 
 
 providers = ['ipa.test', 'samba.test', 'ldap.test']
+# non_user = 'wrong@ipa.test'
+non_user = 'unknown'
 
 
 def transpose_csv(file: str, new_file: Path) -> None:
@@ -34,6 +36,7 @@ parser.add_argument('-o', '--output', type=lambda x: check_parent_dir(x),
 parser.add_argument('--scatterplot', action='store_true')
 args = parser.parse_args()
 
+props = dict(marker='o', mec='black', mfc='w')
 
 df = []
 for x in args.files:
@@ -42,14 +45,11 @@ for x in args.files:
     transpose_csv(x, new_name)
     df.append(pd.read_csv(new_name))
 
-# Remove outliers from the dataframes
-# df[0] = df[0][(np.abs(stats.zscore(df[0])) < 3).all(axis=1)]
-# df[1] = df[1][(np.abs(stats.zscore(df[1])) < 3).all(axis=1)]
 new_df = []
 for f in df:
     new_df.append(f[(np.abs(stats.zscore(f)) < 3).all(axis=1)])
 
-assert len(df[0].columns.values) == len(df[1].columns.values)
+assert len(new_df[0].columns.values) == len(new_df[1].columns.values)
 
 col_names = df[0].columns.values
 
@@ -58,10 +58,11 @@ data = pd.melt(data.reset_index(), id_vars=['req_num', 'version'],
                value_vars=data.columns.tolist(), var_name='provider',
                value_name='time', ignore_index=False)
 
+data['time'] = data['time'].div(1000)
+
 plt.rc('legend', loc="upper right")
 
 my_palette = ['#fb4d3d', '#345995']
-another_palette = ['#000000', '#fcba03']
 sns.set_palette(palette=my_palette)
 
 
@@ -95,12 +96,22 @@ if args.scatterplot:
         ax.add_artist(ax.legend(handles, labels, loc='upper right'))
         ax.legend(handles=custom_legend, loc='upper left')
 else:
-    fig, ax = plt.subplots(1, 1, figsize=(18/2.54, 28/2.54))
+    # Separate data into two dataframes if error values were measured too
+    g = data.groupby('provider')
+    if non_user in g.groups:
+        error_data = g.get_group(non_user)
+        data = data[data['provider'] != non_user]
 
-    boxplot = sns.boxplot(ax=ax, data=data, x='provider', y='time', hue='version')
+    fig, ax = plt.subplots(1, 1, figsize=(18/2.54, 28/3/2.54))
+    fig.suptitle(Path(args.files[0]).stem.split('-', 1)[0]
+                 + ' requests per responder')
 
-    boxplot.set_xlabel('num. of request')
-    boxplot.set_ylabel('time (us)')
+    boxplot = sns.boxplot(ax=ax, data=data, x='provider', y='time',
+                          hue='version', hue_order=['old', 'new'],
+                          flierprops=props)
+
+    boxplot.set_xlabel('Provider name')
+    boxplot.set_ylabel('Time (ms)')
     boxplot.grid(axis='y', alpha=0.8, linewidth=0.5)
 
 
@@ -110,3 +121,27 @@ if args.output:
     plt.savefig(args.output)
 
 plt.show()
+
+if not args.scatterplot:
+    try:
+        fig, ax = plt.subplots(1, 1, figsize=(18/2.54, 28/3/2.54))
+
+        fig.suptitle(Path(args.files[0]).stem.split('-', 1)[0]
+                     + ' requests for a non-existent user: wrong@ipa.test ')
+
+        boxplot = sns.boxplot(ax=ax, data=error_data, x='provider', y='time',
+                              hue='version', hue_order=['old', 'new'],
+                              flierprops=props)
+        boxplot.set_xlabel(f'User: {error_data.provider.unique()[0]}')
+        boxplot.set_ylabel('Time (ms)')
+        boxplot.grid(axis='y', alpha=0.8, linewidth=0.5)
+
+        ax.get_xaxis().set_ticks([])
+        plt.tight_layout()
+
+        if args.output:
+            plt.savefig(args.output[:-4] + '-error' + args.output[-4:])
+
+        plt.show()
+    except NameError:
+        print('No error data was measured')

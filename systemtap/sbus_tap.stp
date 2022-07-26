@@ -6,7 +6,8 @@ global normal = "\033[0m"
 
 global curr_req_name = ""
 global curr_req_type = ""
-global curr_target = ""
+global curr_conn_name = ""
+global curr_bus = ""
 
 global send_time = 0
 global done_time = 0
@@ -70,7 +71,7 @@ probe nss_getby_done {
 probe sss_dp_send {
     if (curr_req_name == opt_name) {
         send_time = gettimeofday_us()
-        curr_target = conn_name # this is used later to match the request in sbus_req_call_send
+        curr_conn_name = conn_name # this is used later to match the request in sbus_req_call_send
         if ($1) {
             printf("  SSS_SEND [%d]: %s, %s\n", pid(), opt_name, conn_name)
         }
@@ -100,6 +101,7 @@ probe sss_dp_done {
 probe sbus_req_call_send {
     # ignore other methods triggered by sss_cache,...
     if (sbus_method == "getAccountInfo") {
+        curr_bus = bus
         if ($1 && send_time != 0) {
             printf("    BUS_SEND [%d]: %s\n", pid(), sbus_method)
         }
@@ -115,11 +117,11 @@ probe sbus_req_call_send {
  */
 probe sbus_req_call_done {
     if (method_counter <= 0) {
-        if (curr_target == sbus_send) {
+        if (curr_conn_name == sbus_send || curr_bus == sbus_send) {
             can_stop = 1
 
             if ($1) {
-                printf("    BUS_DONE [%d]: %s - %s\n", pid(), curr_target, sbus_send)
+                printf("    BUS_DONE [%d]: %s - %s\n", pid(), curr_conn_name, sbus_send)
             }
         }
     } else {
@@ -180,7 +182,7 @@ function print_results(name:string) %{
         }
 
     } else if (strcmp(STAP_ARG_name, "NULL") == 0){
-        STAP_PRINTF("unknown_user,");
+        STAP_PRINTF("wrong@ipa.test,");
         for (i; i < wrong_counter; i++) {
             STAP_PRINTF("%ld", wrong_results[i]);
             if (i != wrong_counter -1)

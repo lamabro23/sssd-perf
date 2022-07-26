@@ -134,11 +134,6 @@ def start_sytemtap(script: str, out: str, verbose: int) -> Popen:
     return stap_process
 
 
-if not Path(sss_cache).exists() or not Path(sssctl).exists():
-    print('Please install the sssd_tools package')
-    exit(1)
-
-
 # TODO change the return value to a list if the content
 # won't be needed in other ways
 def check_ldap_config(parser: argparse.ArgumentParser, arg: str):
@@ -155,6 +150,33 @@ def check_parent_dir(arg: str):
     return arg
 
 
+def check_sudo(s: str) -> None:
+    if re.search('root', s) is not None:
+        raise IOError('This script needs to be run as root')
+
+
+def send_requests(users: dict, req_cnt: int, warm_up: bool) -> None:
+    if warm_up:
+        print("Starting SSSD warm-up")
+
+    for provider, usernames in users.items():
+        if provider in args.providers:
+            if not warm_up:
+                print(f'Run for {provider} has started')
+            for user in usernames:
+                if not warm_up:
+                    print(f'  Fetching {user}')
+                for i in range(req_cnt):
+                    run([sss_cache, '-E'])
+                    try:
+                        pwd.getpwnam(user)
+                    except KeyError as e:
+                        if re.search('wrong@.*\\.test', str(e)) is not None:
+                            pass
+                        else:
+                            print('Error:', e)
+
+
 parser = argparse.ArgumentParser()
 parser.add_argument('-p', '--providers', nargs='+', default=providers)
 parser.add_argument('-r', '--requests-count', type=int, default=1)
@@ -168,25 +190,20 @@ parser.add_argument('-l', '--ldap-config', default='conf/sssd-ldap.conf',
 args = parser.parse_args()
 
 
+if not Path(sss_cache).exists() or not Path(sssctl).exists():
+    print('Please install the sssd_tools package')
+    exit(1)
+
+_, stderr = Popen([sss_cache, '-E'], stderr=PIPE).communicate()
+check_sudo(str(stderr))
+
+# Prepare the environment and start the warm-up
 prepare_providers(args.providers)
+send_requests(users, 5, True)
 
+# Start the SystemTap script in the background and start sending requests
 stap = start_sytemtap(args.systemtap_script, args.stap_output, args.verbose_stap)
-
-for provider, usernames in users.items():
-    if provider in args.providers:
-        print(f'Run for {provider} has started')
-        for user in usernames:
-            print(f'  Fetching {user}')
-            for i in range(args.requests_count):
-                run([sss_cache, '-E'])
-                try:
-                    pwd.getpwnam(user)
-                except KeyError as e:
-                    if re.search('wrong@.*\\.test', str(e)) is not None:
-                        pass
-                    else:
-                        print('Error:', e)
-
+send_requests(users, args.requests_count, False)
 
 print('Test finished successfully!')
 stap.terminate()
