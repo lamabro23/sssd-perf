@@ -1,5 +1,6 @@
-
 import argparse
+from pathlib import Path
+import re
 
 
 def parse_argumets():
@@ -18,7 +19,7 @@ def parse_argumets():
     parser.add_argument('--run-systemtap', action='store_true')
     parser.add_argument('--stap-script', type=str,
                         default='systemtap/sbus_tap.stp')
-    parser.add_argument('--stap-output', type=str,
+    parser.add_argument('--stap-output', type=stap_output,
                         default='systemtap/csv/stap.csv')
     parser.add_argument('--stap-verbosity', action='store_true')
     parser.add_argument('--stap-request-count', type=int, default=5)
@@ -34,3 +35,23 @@ def parse_argumets():
                                  'wrong@samba.test', 'wrong@ldap.test'])
 
     return parser.parse_args()
+
+
+def check_parent_dir(name: str) -> None:
+    parent_dir = Path(name).parent
+    if not parent_dir.exists():
+        parent_dir.mkdir(exist_ok=True)
+
+
+def stap_output(name: str):
+    check_parent_dir(name)
+    if Path(name).suffix != '.csv':
+        raise ValueError('The output for SystemTap has to be a CSV file!')
+    return name
+
+
+def hf_output(name: str):
+    check_parent_dir(name)
+    if Path(name).suffix != '.json':
+        raise ValueError('The output for SystemTap has to be a JSON file!')
+    return name
