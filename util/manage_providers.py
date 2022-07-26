@@ -3,6 +3,8 @@ import shutil
 from subprocess import DEVNULL, PIPE, Popen, STDOUT, run
 from time import sleep
 
+import ldap
+
 ipa_cmd = {'join': 'ipa-client-install --unattended --no-ntp'
                    ' --domain ipa.test --principal admin'
                    ' --password Secret123 --force-join',
@@ -12,11 +14,35 @@ samba_cmd = {'join': 'realm join samba.test',
              'leave': 'realm leave',
              'list': 'realm list --name-only'}
 
+ldap_user = {'objectclass': b'posixAccount',
+             'homeDirectory': b'/home/adminldap',
+             'uidNumber': b'1000',
+             'gidNumber': b'1000',
+             'cn': b'Admin LDAP'}
+
+
+def ldap_user_check() -> None:
+    binddn = 'cn=Directory Manager'
+    pwd = 'Secret123'
+    basedn = 'dc=ldap,dc=test'
+    scope = ldap.SCOPE_SUBTREE
+    search = '(&(objectClass=posixAccount)(uidNumber=*)(|(cn=Admin LDAP)))'
+
+    conn = ldap.initialize('ldap://master.ldap.test')
+    conn.simple_bind_s(binddn, pwd)
+
+    if len(conn.search_s(base=basedn, scope=scope, filterstr=search)) == 0:
+        dn = 'uid=adminldap,dc=ldap,dc=test'
+        conn.add_s(dn, [(k, v) for k, v in ldap_user.items()])
+
 
 def prepare_providers(providers: list, sssctl: str,
                       sssd_conf: str, ldap_template: str) -> list[str]:
     closed_providers = []
     curr_joined = get_current_domains(sssctl)
+
+    if 'ldap.test' in curr_joined:
+        ldap_user_check()
 
     if 'ipa' not in providers and 'ipa.test' in curr_joined:
         print('About to leave ipa domain')
@@ -50,7 +76,7 @@ def prepare_providers(providers: list, sssctl: str,
 
 
 def get_current_domains(sssctl: str) -> list[str]:
-    p = Popen(sssctl, stdout=PIPE, universal_newlines=True)
+    p = Popen([sssctl, 'domain-list'], stdout=PIPE, universal_newlines=True)
     stdout, _ = p.communicate()
     return stdout.split()
 
@@ -61,3 +87,29 @@ def remove_from_domains_list(line: str) -> str:
         if o in line:
             return line.replace(o, '')
     return line
+
+
+def resume_providers(providers: list, sss_cache: str,
+                     ldap_template: str, sssd_conf: str) -> None:
+    run([sss_cache, '-E'])
+    print('About to resume any previously closed providers')
+    if 'ipa' in providers:
+        run(ipa_cmd['join'].split(), stdout=DEVNULL, stderr=STDOUT)
+    if 'samba' in providers:
+        Popen(samba_cmd['join'].split(), stdin=PIPE,
+              stdout=DEVNULL).communicate(input=b'Secret123')
+    if 'ldap' in providers:
+        with open(ldap_template) as ldap:
+            # ldap.seek(0)
+            ldap_lines = ldap.readlines()
+        with open(sssd_conf, 'r') as f:
+            tmp_lines = f.readlines()
+        with open(sssd_conf, 'w') as f:
+            for line in tmp_lines:
+                if re.match('domains =', line) is not None:
+                    line = line.replace('\n', ', ldap.test\n')
+                f.write(line)
+        with open(sssd_conf, 'a') as f:
+            for line in ldap_lines:
+                f.write(line)
+        run(['/bin/systemctl', 'restart', 'sssd.service'], stdout=DEVNULL)
