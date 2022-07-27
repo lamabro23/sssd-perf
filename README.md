@@ -54,7 +54,7 @@ The flags for configuration of *hyperfine* tests:
 - `--hf-runs` - number of runs to send do with each of the specified commands (default: 10).
 
 Example:
-Start *hyperine* tests with 100 runs of the command `id adminldap@ldap.test`:
+Start *hyperfine* tests with 100 runs of the command `id adminldap@ldap.test`:
 ```bash
 python runner.py --run-hyperfine --hf-runs 500 --hf-parameters adminldap@ldap.test
 ```
