@@ -14,15 +14,8 @@ def check_tools(tools: list[str]) -> None:
                           ' Please install the sssd_tools package')
 
 
-def check_sudo():
-    _, stderr = Popen([args.sss_cache, '-E'], stderr=PIPE).communicate()
-    if re.search('root', str(stderr)) is not None:
-        raise OSError('This test suite needs to be with root privileges!')
-
-
 args = parameter_parser.parse_argumets()
 check_tools([args.sss_cache, args.sssctl])
-check_sudo()
 
 # Disconnect and track redundant providers for reconnection in the end
 closed_providers = manage_providers\
@@ -45,7 +38,7 @@ try:
         stap.send_requests(args.providers, args.sss_cache,
                            args.stap_request_count, False)
         # Stop SystemTap
-        sp.terminate()
+        stap.stop_systemtap(sp)
 
         print('SystemTap tests finished successfully!')
 

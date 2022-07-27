@@ -5,14 +5,13 @@ from time import sleep
 
 import ldap
 
-ipa_cmd = {'join': 'ipa-client-install --unattended --no-ntp'
+ipa_cmd = {'join': 'sudo ipa-client-install --unattended --no-ntp'
                    ' --domain ipa.test --principal admin'
                    ' --password Secret123 --force-join',
-           'leave': 'ipa-client-install --uninstall'}
+           'leave': 'sudo ipa-client-install --uninstall'}
 
-samba_cmd = {'join': 'realm join samba.test',
-             'leave': 'realm leave',
-             'list': 'realm list --name-only'}
+samba_cmd = {'join': 'sudo realm join samba.test',
+             'leave': 'sudo realm leave'}
 
 ldap_user = {'objectclass': b'posixAccount',
              'homeDirectory': b'/home/adminldap',
@@ -69,14 +68,14 @@ def prepare_providers(providers: list, sssctl: str,
                     mod_conf.write(remove_from_domains_list(line))
                 elif line not in ldap_lines:
                     mod_conf.write(line)
-        run('/bin/systemctl restart sssd.service'.split(), stdout=DEVNULL)
+        run(['sudo', '/bin/systemctl', 'restart', 'sssd.service'], stdout=DEVNULL)
         closed_providers.append('ldap')
 
     return closed_providers
 
 
 def get_current_domains(sssctl: str) -> list[str]:
-    p = Popen([sssctl, 'domain-list'], stdout=PIPE, universal_newlines=True)
+    p = Popen(['sudo', sssctl, 'domain-list'], stdout=PIPE, universal_newlines=True)
     stdout, _ = p.communicate()
     return stdout.split()
 
@@ -91,7 +90,7 @@ def remove_from_domains_list(line: str) -> str:
 
 def resume_providers(providers: list, sss_cache: str,
                      ldap_template: str, sssd_conf: str) -> None:
-    run([sss_cache, '-E'])
+    run(['sudo', sss_cache, '-E'])
     print('About to resume any previously closed providers')
     if 'ipa' in providers:
         run(ipa_cmd['join'].split(), stdout=DEVNULL, stderr=STDOUT)
@@ -112,4 +111,4 @@ def resume_providers(providers: list, sss_cache: str,
         with open(sssd_conf, 'a') as f:
             for line in ldap_lines:
                 f.write(line)
-        run(['/bin/systemctl', 'restart', 'sssd.service'], stdout=DEVNULL)
+        run(['sudo', '/bin/systemctl', 'restart', 'sssd.service'], stdout=DEVNULL)

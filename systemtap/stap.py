@@ -1,7 +1,10 @@
+from pathlib import Path
 import pwd
 import re
 from subprocess import DEVNULL, PIPE, Popen, STDOUT, run
 from time import sleep
+
+from ldap import os
 
 users = {'ipa': ['admin@ipa.test', 'wrong@ipa.test'],
          'samba': ['administrator@samba.test'],
@@ -21,7 +24,7 @@ def send_requests(providers: list, sss_cache: str,
                 if not warm_up:
                     print(f'  Fetching {user}')
                 for _ in range(req_cnt):
-                    run([sss_cache, '-E'])
+                    run(['sudo', sss_cache, '-E'])
                     try:
                         pwd.getpwnam(user)
                     except KeyError as e:
@@ -36,12 +39,17 @@ def send_requests(providers: list, sss_cache: str,
 
 def start_sytemtap(script: str, out: str, verbose: bool) -> Popen:
     print(f'Starting systemtap with the command:')
-    stap_cmd = ['stap', '-w', '-g', f'{script}',
+    stap_cmd = ['sudo', 'stap', '-w', '-g', f'{script}',
                 '-o', f'{out}', f'{int(verbose)}']
     print(' ', ' '.join(stap_cmd))
-    stap_process = Popen(stap_cmd, stdout=DEVNULL, stderr=STDOUT)
+    stap_process = Popen(stap_cmd, stdout=DEVNULL, stderr=STDOUT, preexec_fn=os.setpgrp)
     sleep(5)
     return stap_process
+
+
+def stop_systemtap(stap: Popen):
+    stapid = stap.pid
+    Popen(['sudo', 'kill', '-15', f'{stapid}'], stdout=DEVNULL, stderr=STDOUT)
 
 
 def check_markers() -> None:
