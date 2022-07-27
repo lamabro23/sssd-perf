@@ -33,6 +33,9 @@ closed_providers = manage_providers\
 
 try:
     if args.run_systemtap:
+        # Check whether the SSSD binary contains the required markers
+        stap.check_markers()
+
         # Run 5 warm-up runs before starting the tests
         stap.send_requests(args.providers, args.sss_cache, 5, True)
 

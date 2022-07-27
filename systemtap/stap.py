@@ -1,6 +1,6 @@
 import pwd
 import re
-from subprocess import DEVNULL, Popen, STDOUT, run
+from subprocess import DEVNULL, PIPE, Popen, STDOUT, run
 from time import sleep
 
 users = {'ipa': ['admin@ipa.test', 'wrong@ipa.test'],
@@ -42,3 +42,15 @@ def start_sytemtap(script: str, out: str, verbose: bool) -> Popen:
     stap_process = Popen(stap_cmd, stdout=DEVNULL, stderr=STDOUT)
     sleep(5)
     return stap_process
+
+
+def check_markers() -> None:
+    probe_list = ['sss_dp_send', 'sss_dp_done',
+                  'dp_req_send', 'dp_req_done',
+                  'nss_getby_name_send', 'nss_getby_done']
+    for probe in probe_list:
+        stap_process = Popen(['stap', '-L', f'process("/usr/libexec/sssd/sssd_*").mark("{probe}")'],
+                             stdout=PIPE)
+        out, _ = stap_process.communicate()
+        if out.decode('utf-8') == '':
+            raise IOError(f'The probe \'{probe}\' is missing from the SSSD binary!')
