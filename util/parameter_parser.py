@@ -1,6 +1,5 @@
 import argparse
 from pathlib import Path
-import re
 
 
 def parse_argumets():
@@ -21,12 +20,12 @@ def parse_argumets():
                         default='systemtap/sbus_tap.stp')
     parser.add_argument('--stap-output', type=stap_output,
                         default='systemtap/csv/stap.csv')
-    parser.add_argument('--stap-verbosity', action='store_true')
     parser.add_argument('--stap-request-count', type=int, default=5)
+    parser.add_argument('--stap-verbosity', action='store_true')
 
     # Hyperfine parameters
     parser.add_argument('--run-hyperfine', action='store_true')
-    parser.add_argument('--hf-output', type=str,
+    parser.add_argument('--hf-output', type=hf_output,
                         default='hyperfine/json/hf.json')
     parser.add_argument('--hf-runs', type=int, default=10)
     parser.add_argument('--hf-parameters', nargs='+',
@@ -40,7 +39,7 @@ def parse_argumets():
 def check_parent_dir(name: str) -> None:
     parent_dir = Path(name).parent
     if not parent_dir.exists():
-        parent_dir.mkdir(exist_ok=True)
+        parent_dir.mkdir(parents=True, exist_ok=True)
 
 
 def stap_output(name: str):

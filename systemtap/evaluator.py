@@ -10,9 +10,7 @@ from scipy import stats
 import seaborn as sns
 
 
-providers = ['ipa.test', 'samba.test', 'ldap.test']
-# non_user = 'wrong@ipa.test'
-non_user = 'unknown'
+non_user = 'wrong@ipa.test'
 
 
 def transpose_csv(file: str, new_file: Path) -> None:
@@ -28,7 +26,6 @@ def check_parent_dir(arg: str):
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('-p', '--providers', nargs='+', default=providers)
 parser.add_argument('-f', '--files', nargs='+', type=str,
                     default=['csv/stap.csv', 'csv/old_stap.csv'])
 parser.add_argument('-o', '--output', type=lambda x: check_parent_dir(x),
