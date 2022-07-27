@@ -9,5 +9,5 @@ The parameters are:
 Example:
 
 ```bash
-python evaluator.py --files json/new/10-requests.json --files json/old/10-requests.json --output figures/10-requests.png
+python evaluator.py --files json/new/10-requests.json json/old/10-requests.json --output figures/10-requests.png
 ```
