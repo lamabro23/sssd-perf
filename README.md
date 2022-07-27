@@ -58,10 +58,10 @@ The flags for configuration of *SystemTap* tests:
 - `--stap-verbosity` - start the probe script with higher level of verbosity (for debugging, default: False).
 
 Example:
-Start *SystemTap* tests with 500 requests to two providers: LDAP and FreeIPA:
+Start *SystemTap* tests with 50 requests to two providers: LDAP and FreeIPA:
 
 ```bash
-python runner.py --run-systemtap --stap-request-count 500 --providers ldap ipa
+python runner.py --run-systemtap --stap-request-count 50 --providers ldap ipa
 ```
 
 ### Hyperfine
@@ -74,10 +74,10 @@ The flags for configuration of *hyperfine* tests:
 - `--hf-runs` - number of runs to send do with each of the specified commands (default: 10).
 
 Example:
-Start *hyperfine* tests with 100 runs of the command `id adminldap@ldap.test`:
+Start *hyperfine* tests with 10 runs of the command `id adminldap@ldap.test`:
 
 ```bash
-python runner.py --run-hyperfine --hf-runs 500 --hf-parameters adminldap@ldap.test
+python runner.py --run-hyperfine --hf-runs 10 --hf-parameters adminldap@ldap.test
 ```
 
 ## Generate the plots
