@@ -1,5 +1,6 @@
 import argparse
 import json
+from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -8,10 +9,15 @@ from scipy import stats
 import seaborn as sns
 
 
-parser = argparse.ArgumentParser(description=__doc__)
+def output(name: str) -> str:
+    parent_dir = Path(name).parent
+    if not parent_dir.exists():
+        parent_dir.mkdir(parents=True, exist_ok=True)
+    return name
+
+parser = argparse.ArgumentParser()
 parser.add_argument('-f', '--files', nargs='+', type=str)
-parser.add_argument('-t', '--title', type=str)
-parser.add_argument('-o', '--output', type=str)
+parser.add_argument('-o', '--output', type=output, default='figures/figure.png')
 parser.add_argument('--two-graphs', action='store_true')
 
 args = parser.parse_args()
@@ -87,7 +93,7 @@ else:
         boxplot.legend(title='version')
 
 
-fig.suptitle(args.title if args.title else 'Hyperfine benchmark of SSSD')
+fig.suptitle('Hyperfine benchmark of SSSD')
 plt.tight_layout()
 
 if args.output:

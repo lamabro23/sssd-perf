@@ -1,7 +1,7 @@
 import argparse
 import csv
-
 from pathlib import Path
+
 from matplotlib.lines import Line2D
 import matplotlib.pyplot as plt
 import numpy as np
@@ -10,31 +10,28 @@ from scipy import stats
 import seaborn as sns
 
 
-non_user = 'wrong@ipa.test'
+def output(name: str) -> str:
+    parent_dir = Path(name).parent
+    if not parent_dir.exists():
+        parent_dir.mkdir(parents=True, exist_ok=True)
+    return name
+
+parser = argparse.ArgumentParser()
+parser.add_argument('-f', '--files', nargs='+', type=str)
+parser.add_argument('-o', '--output', type=output, default='figures/figure.png')
+parser.add_argument('--scatterplot', action='store_true')
+args = parser.parse_args()
 
 
 def transpose_csv(file: str, new_file: Path) -> None:
     og = zip(*csv.reader(open(file, 'r')))
     csv.writer(open(new_file, 'w')).writerows(og)
 
-
-def check_parent_dir(arg: str):
-    p = Path(arg).parent
-    if not p.exists():
-        p.mkdir()
-    return arg
-
-
-parser = argparse.ArgumentParser()
-parser.add_argument('-f', '--files', nargs='+', type=str,
-                    default=['csv/stap.csv', 'csv/old_stap.csv'])
-parser.add_argument('-o', '--output', type=lambda x: check_parent_dir(x),
-                    default='figures/figure.png')
-parser.add_argument('--scatterplot', action='store_true')
-args = parser.parse_args()
-
+non_user = 'wrong@ipa.test'
+my_palette = ['#fb4d3d', '#345995']
 props = dict(marker='o', mec='black', mfc='w')
 
+# Transpose the values in CSV files, save them to a new one
 df = []
 for x in args.files:
     p = Path(x)
@@ -42,11 +39,12 @@ for x in args.files:
     transpose_csv(x, new_name)
     df.append(pd.read_csv(new_name))
 
+# Get rid of the largest and lowest outliers for clearer plots
+# Inspired by:
+# https://stackoverflow.com/questions/23199796/detect-and-exclude-outliers-in-a-pandas-dataframe
 new_df = []
 for f in df:
     new_df.append(f[(np.abs(stats.zscore(f)) < 3).all(axis=1)])
-
-assert len(new_df[0].columns.values) == len(new_df[1].columns.values)
 
 col_names = df[0].columns.values
 
@@ -58,10 +56,7 @@ data = pd.melt(data.reset_index(), id_vars=['req_num', 'version'],
 data['time'] = data['time'].div(1000)
 
 plt.rc('legend', loc="upper right")
-
-my_palette = ['#fb4d3d', '#345995']
 sns.set_palette(palette=my_palette)
-
 
 if args.scatterplot:
     custom_legend = [Line2D([0], [0], color='black', label='Mean'),

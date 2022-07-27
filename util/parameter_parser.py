@@ -42,14 +42,14 @@ def check_parent_dir(name: str) -> None:
         parent_dir.mkdir(parents=True, exist_ok=True)
 
 
-def stap_output(name: str):
+def stap_output(name: str) -> str:
     check_parent_dir(name)
     if Path(name).suffix != '.csv':
         raise ValueError('The output for SystemTap has to be a CSV file!')
     return name
 
 
-def hf_output(name: str):
+def hf_output(name: str) -> str:
     check_parent_dir(name)
     if Path(name).suffix != '.json':
         raise ValueError('The output for SystemTap has to be a JSON file!')
